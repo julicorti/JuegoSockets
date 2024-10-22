@@ -40,19 +40,20 @@ socket.on('updateProjectiles', (backEndProjectiles) => {
 
 // Manejo del clic en el canvas para disparar proyectiles
 canvas.addEventListener('click', (event) => {
+  const player = frontEndPlayers[socket.id];
+  if (!player) {
+    console.warn(`Player with id ${socket.id} is not defined.`);
+    return; // Salir si el jugador no está definido
+  }
+
   const { top, left } = canvas.getBoundingClientRect();
- 
-  const playerPosition = {
-    x: frontEndPlayers[socket.id]?.x,
-    y: frontEndPlayers[socket.id]?.y,
-  };
-  if (!playerPosition) return; // Asegúrate de que el jugador esté definido
+  const playerPosition = { x: player.x, y: player.y };
+
   const angle = Math.atan2(
     event.clientY - top - playerPosition.y,
     event.clientX - left - playerPosition.x
   );
 
-  // Envía el ángulo al servidor para disparar el proyectil
   socket.emit('shoot', {
     x: playerPosition.x,
     y: playerPosition.y,
@@ -71,8 +72,8 @@ socket.on('updatePlayers', (backEndPlayers) => {
         radius: 10,
         color: backEndPlayer.color,
         username: backEndPlayer.username,
+        lives: backEndPlayer.lives, // Asegúrate de que las vidas también se asignen
       });
-
       document.querySelector(
         '#playerLabels'
       ).innerHTML += `<div data-id="${id}" data-score="${backEndPlayer.score}">${backEndPlayer.username}: ${backEndPlayer.score}</div>`;

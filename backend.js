@@ -36,21 +36,17 @@ io.on('connection', (socket) => {
       score: 0,
       username,
       lives: 3, // Inicializa las vidas
-
       radius: RADIUS,
       canvas: {
         width,
         height,
       },
     };
+    console.log('Jugadores después de la inicialización:', backEndPlayers);
     io.emit('updatePlayers', backEndPlayers);
   });
 
-
   socket.on('shoot', ({ x, y, angle }) => {
-    // Lógica para manejar el disparo en el backend
-    // Por ejemplo, agregar proyectiles al servidor
-
     projectileId++;
     const velocity = {
       x: Math.cos(angle) * 5,
@@ -64,14 +60,12 @@ io.on('connection', (socket) => {
       y,
       velocity,
       playerId: socket.id,
-      color: projectileColor, // Usa el color predefinido
-
+      color: projectileColor,
     };
-  
+
     // Emitir los proyectiles actualizados a todos los jugadores
     io.emit('updateProjectiles', backEndProjectiles);
   });
-  
 
   socket.on('keydown', ({ keycode, sequenceNumber }) => {
     const backEndPlayer = backEndPlayers[socket.id];
@@ -117,18 +111,31 @@ setInterval(() => {
 
     for (const playerId in backEndPlayers) {
       const backEndPlayer = backEndPlayers[playerId];
+      if (!backEndPlayer) {
+        console.warn(`Jugador ${playerId} no encontrado en backEndPlayers`);
+        continue; // Salta este jugador si no existe
+      }
+      
       const distance = Math.hypot(
         backEndProjectiles[id].x - backEndPlayer.x,
         backEndProjectiles[id].y - backEndPlayer.y
       );
-
+    
       if (
         distance < PROJECTILE_RADIUS + backEndPlayer.radius &&
         backEndProjectiles[id].playerId !== playerId
       ) {
-        backEndPlayers[backEndProjectiles[id].playerId].score++;
+        console.log(`Impacto: ${playerId} ha sido golpeado por un proyectil`);
+        backEndPlayers[playerId].lives -= 2;
+        io.to(playerId).emit('updateLives', backEndPlayers[playerId].lives);
+    
+        if (backEndPlayers[playerId].lives <= 0) {
+          console.log(`Jugador ${playerId} se ha quedado sin vidas`);
+          delete backEndPlayers[playerId];
+          io.emit('playerDisconnected', playerId);
+        }
+    
         delete backEndProjectiles[id];
-        delete backEndPlayers[playerId];
         break;
       }
     }
