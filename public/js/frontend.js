@@ -1,51 +1,68 @@
-const canvas = document.querySelector('canvas')
-const c = canvas.getContext('2d')
+const canvas = document.querySelector('canvas');
+const c = canvas.getContext('2d');
+const socket = io();
+const scoreEl = document.querySelector('#scoreEl');
 
-const socket = io()
+const devicePixelRatio = window.devicePixelRatio || 1;
+canvas.width = 1024 * devicePixelRatio;
+canvas.height = 576 * devicePixelRatio;
+c.scale(devicePixelRatio, devicePixelRatio);
 
-const scoreEl = document.querySelector('#scoreEl')
-
-const devicePixelRatio = window.devicePixelRatio || 1
-
-canvas.width = 1024 * devicePixelRatio
-canvas.height = 576 * devicePixelRatio
-
-c.scale(devicePixelRatio, devicePixelRatio)
-
-const x = canvas.width / 2
-const y = canvas.height / 2
-
-const frontEndPlayers = {}
-const frontEndProjectiles = {}
+const frontEndPlayers = {};
+const frontEndProjectiles = {};
 
 socket.on('updateProjectiles', (backEndProjectiles) => {
   for (const id in backEndProjectiles) {
-    const backEndProjectile = backEndProjectiles[id]
+    const backEndProjectile = backEndProjectiles[id];
 
     if (!frontEndProjectiles[id]) {
       frontEndProjectiles[id] = new Projectile({
         x: backEndProjectile.x,
         y: backEndProjectile.y,
         radius: 5,
-        color: frontEndPlayers[backEndProjectile.playerId]?.color,
-        velocity: backEndProjectile.velocity
-      })
+        color: backEndProjectile.color || '#FFFFFF', // Asigna un color por defecto si no hay
+        velocity: backEndProjectile.velocity,
+      });
     } else {
-      frontEndProjectiles[id].x += backEndProjectiles[id].velocity.x
-      frontEndProjectiles[id].y += backEndProjectiles[id].velocity.y
+      frontEndProjectiles[id].x = backEndProjectile.x; // Actualiza la posición
+      frontEndProjectiles[id].y = backEndProjectile.y;
     }
   }
 
+
+  // Elimina proyectiles que ya no están
   for (const frontEndProjectileId in frontEndProjectiles) {
     if (!backEndProjectiles[frontEndProjectileId]) {
-      delete frontEndProjectiles[frontEndProjectileId]
+      delete frontEndProjectiles[frontEndProjectileId];
     }
   }
-})
+});
+
+// Manejo del clic en el canvas para disparar proyectiles
+canvas.addEventListener('click', (event) => {
+  const { top, left } = canvas.getBoundingClientRect();
+ 
+  const playerPosition = {
+    x: frontEndPlayers[socket.id]?.x,
+    y: frontEndPlayers[socket.id]?.y,
+  };
+  if (!playerPosition) return; // Asegúrate de que el jugador esté definido
+  const angle = Math.atan2(
+    event.clientY - top - playerPosition.y,
+    event.clientX - left - playerPosition.x
+  );
+
+  // Envía el ángulo al servidor para disparar el proyectil
+  socket.emit('shoot', {
+    x: playerPosition.x,
+    y: playerPosition.y,
+    angle,
+  });
+});
 
 socket.on('updatePlayers', (backEndPlayers) => {
   for (const id in backEndPlayers) {
-    const backEndPlayer = backEndPlayers[id]
+    const backEndPlayer = backEndPlayers[id];
 
     if (!frontEndPlayers[id]) {
       frontEndPlayers[id] = new Player({
@@ -53,210 +70,189 @@ socket.on('updatePlayers', (backEndPlayers) => {
         y: backEndPlayer.y,
         radius: 10,
         color: backEndPlayer.color,
-        username: backEndPlayer.username
-      })
+        username: backEndPlayer.username,
+      });
 
       document.querySelector(
         '#playerLabels'
-      ).innerHTML += `<div data-id="${id}" data-score="${backEndPlayer.score}">${backEndPlayer.username}: ${backEndPlayer.score}</div>`
+      ).innerHTML += `<div data-id="${id}" data-score="${backEndPlayer.score}">${backEndPlayer.username}: ${backEndPlayer.score}</div>`;
     } else {
-      document.querySelector(
-        `div[data-id="${id}"]`
-      ).innerHTML = `${backEndPlayer.username}: ${backEndPlayer.score}`
+      const playerLabel = document.querySelector(`div[data-id="${id}"]`);
+      playerLabel.innerHTML = `${backEndPlayer.username}: ${backEndPlayer.score}`;
+      playerLabel.setAttribute('data-score', backEndPlayer.score);
 
-      document
-        .querySelector(`div[data-id="${id}"]`)
-        .setAttribute('data-score', backEndPlayer.score)
-
-      // sorts the players divs
-      const parentDiv = document.querySelector('#playerLabels')
-      const childDivs = Array.from(parentDiv.querySelectorAll('div'))
+      // Ordenar los divs de jugadores
+      const parentDiv = document.querySelector('#playerLabels');
+      const childDivs = Array.from(parentDiv.querySelectorAll('div'));
 
       childDivs.sort((a, b) => {
-        const scoreA = Number(a.getAttribute('data-score'))
-        const scoreB = Number(b.getAttribute('data-score'))
+        const scoreA = Number(a.getAttribute('data-score'));
+        const scoreB = Number(b.getAttribute('data-score'));
+        return scoreB - scoreA;
+      });
 
-        return scoreB - scoreA
-      })
-
-      // removes old elements
+      // Eliminar elementos antiguos
       childDivs.forEach((div) => {
-        parentDiv.removeChild(div)
-      })
+        parentDiv.removeChild(div);
+      });
 
-      // adds sorted elements
+      // Agregar elementos ordenados
       childDivs.forEach((div) => {
-        parentDiv.appendChild(div)
-      })
+        parentDiv.appendChild(div);
+      });
 
       frontEndPlayers[id].target = {
         x: backEndPlayer.x,
-        y: backEndPlayer.y
-      }
+        y: backEndPlayer.y,
+      };
 
       if (id === socket.id) {
         const lastBackendInputIndex = playerInputs.findIndex((input) => {
-          return backEndPlayer.sequenceNumber === input.sequenceNumber
-        })
+          return backEndPlayer.sequenceNumber === input.sequenceNumber;
+        });
 
         if (lastBackendInputIndex > -1)
-          playerInputs.splice(0, lastBackendInputIndex + 1)
+          playerInputs.splice(0, lastBackendInputIndex + 1);
 
         playerInputs.forEach((input) => {
-          frontEndPlayers[id].target.x += input.dx
-          frontEndPlayers[id].target.y += input.dy
-        })
+          frontEndPlayers[id].target.x += input.dx;
+          frontEndPlayers[id].target.y += input.dy;
+        });
       }
     }
   }
 
-  // this is where we delete frontend players
+  // Eliminar jugadores que ya no están
   for (const id in frontEndPlayers) {
     if (!backEndPlayers[id]) {
-      const divToDelete = document.querySelector(`div[data-id="${id}"]`)
-      divToDelete.parentNode.removeChild(divToDelete)
+      const divToDelete = document.querySelector(`div[data-id="${id}"]`);
+      divToDelete.parentNode.removeChild(divToDelete);
 
       if (id === socket.id) {
-        document.querySelector('#usernameForm').style.display = 'block'
+        document.querySelector('#usernameForm').style.display = 'block';
       }
 
-      delete frontEndPlayers[id]
+      delete frontEndPlayers[id];
     }
   }
-})
+});
 
-let animationId
+let animationId;
 function animate() {
-  animationId = requestAnimationFrame(animate)
-  // c.fillStyle = 'rgba(0, 0, 0, 0.1)'
-  c.clearRect(0, 0, canvas.width, canvas.height)
+  animationId = requestAnimationFrame(animate);
+  c.clearRect(0, 0, canvas.width, canvas.height);
 
   for (const id in frontEndPlayers) {
-    const frontEndPlayer = frontEndPlayers[id]
+    const frontEndPlayer = frontEndPlayers[id];
 
-    // linear interpolation
+    // Interpolación lineal
     if (frontEndPlayer.target) {
-      frontEndPlayers[id].x +=
-        (frontEndPlayers[id].target.x - frontEndPlayers[id].x) * 0.5
-      frontEndPlayers[id].y +=
-        (frontEndPlayers[id].target.y - frontEndPlayers[id].y) * 0.5
+      frontEndPlayers[id].x += (frontEndPlayers[id].target.x - frontEndPlayers[id].x) * 0.5;
+      frontEndPlayers[id].y += (frontEndPlayers[id].target.y - frontEndPlayers[id].y) * 0.5;
     }
 
-    frontEndPlayer.draw()
+    frontEndPlayer.draw();
   }
 
   for (const id in frontEndProjectiles) {
-    const frontEndProjectile = frontEndProjectiles[id]
-    frontEndProjectile.draw()
+    const frontEndProjectile = frontEndProjectiles[id];
+    c.fillStyle = frontEndProjectile.color; 
+    frontEndProjectile.draw();
   }
-
-  // for (let i = frontEndProjectiles.length - 1; i >= 0; i--) {
-  //   const frontEndProjectile = frontEndProjectiles[i]
-  //   frontEndProjectile.update()
-  // }
 }
 
-animate()
+animate();
 
 const keys = {
-  w: {
-    pressed: false
-  },
-  a: {
-    pressed: false
-  },
-  s: {
-    pressed: false
-  },
-  d: {
-    pressed: false
-  }
-}
+  w: { pressed: false },
+  a: { pressed: false },
+  s: { pressed: false },
+  d: { pressed: false },
+};
 
-const SPEED = 5
-const playerInputs = []
-let sequenceNumber = 0
+const SPEED = 5;
+const playerInputs = [];
+let sequenceNumber = 0;
+
 setInterval(() => {
   if (keys.w.pressed) {
-    sequenceNumber++
-    playerInputs.push({ sequenceNumber, dx: 0, dy: -SPEED })
-    // frontEndPlayers[socket.id].y -= SPEED
-    socket.emit('keydown', { keycode: 'KeyW', sequenceNumber })
+    sequenceNumber++;
+    playerInputs.push({ sequenceNumber, dx: 0, dy: -SPEED });
+    socket.emit('keydown', { keycode: 'KeyW', sequenceNumber });
   }
 
   if (keys.a.pressed) {
-    sequenceNumber++
-    playerInputs.push({ sequenceNumber, dx: -SPEED, dy: 0 })
-    // frontEndPlayers[socket.id].x -= SPEED
-    socket.emit('keydown', { keycode: 'KeyA', sequenceNumber })
+    sequenceNumber++;
+    playerInputs.push({ sequenceNumber, dx: -SPEED, dy: 0 });
+    socket.emit('keydown', { keycode: 'KeyA', sequenceNumber });
   }
 
   if (keys.s.pressed) {
-    sequenceNumber++
-    playerInputs.push({ sequenceNumber, dx: 0, dy: SPEED })
-    // frontEndPlayers[socket.id].y += SPEED
-    socket.emit('keydown', { keycode: 'KeyS', sequenceNumber })
+    sequenceNumber++;
+    playerInputs.push({ sequenceNumber, dx: 0, dy: SPEED });
+    socket.emit('keydown', { keycode: 'KeyS', sequenceNumber });
   }
 
   if (keys.d.pressed) {
-    sequenceNumber++
-    playerInputs.push({ sequenceNumber, dx: SPEED, dy: 0 })
-    // frontEndPlayers[socket.id].x += SPEED
-    socket.emit('keydown', { keycode: 'KeyD', sequenceNumber })
+    sequenceNumber++;
+    playerInputs.push({ sequenceNumber, dx: SPEED, dy: 0 });
+    socket.emit('keydown', { keycode: 'KeyD', sequenceNumber });
   }
-}, 15)
+}, 15);
 
 window.addEventListener('keydown', (event) => {
-  if (!frontEndPlayers[socket.id]) return
+  if (!frontEndPlayers[socket.id]) return;
 
   switch (event.code) {
     case 'KeyW':
-      keys.w.pressed = true
-      break
-
+      keys.w.pressed = true;
+      break;
     case 'KeyA':
-      keys.a.pressed = true
-      break
-
+      keys.a.pressed = true;
+      break;
     case 'KeyS':
-      keys.s.pressed = true
-      break
-
+      keys.s.pressed = true;
+      break;
     case 'KeyD':
-      keys.d.pressed = true
-      break
+      keys.d.pressed = true;
+      break;
   }
-})
+});
 
 window.addEventListener('keyup', (event) => {
-  if (!frontEndPlayers[socket.id]) return
+  if (!frontEndPlayers[socket.id]) return;
 
   switch (event.code) {
     case 'KeyW':
-      keys.w.pressed = false
-      break
-
+      keys.w.pressed = false;
+      break;
     case 'KeyA':
-      keys.a.pressed = false
-      break
-
+      keys.a.pressed = false;
+      break;
     case 'KeyS':
-      keys.s.pressed = false
-      break
-
+      keys.s.pressed = false;
+      break;
     case 'KeyD':
-      keys.d.pressed = false
-      break
+      keys.d.pressed = false;
+      break;
   }
-})
+});
 
 document.querySelector('#usernameForm').addEventListener('submit', (event) => {
-  event.preventDefault()
-  document.querySelector('#usernameForm').style.display = 'none'
+  event.preventDefault();
+  
+  const username = document.querySelector('#usernameInput').value;
+  const color = document.querySelector('#colorInput').value;
+  if (!username || !color) {
+    alert('Por favor, introduce tu nombre y selecciona un color.');
+    return;
+  }
+
+  document.querySelector('#usernameForm').style.display = 'none';
   socket.emit('initGame', {
     width: canvas.width,
     height: canvas.height,
-    devicePixelRatio,
-    username: document.querySelector('#usernameInput').value
-  })
-})
+    username,
+    color // Envía el color seleccionado
+  });
+});
