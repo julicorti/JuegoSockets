@@ -2,7 +2,6 @@ const express = require('express');
 const app = express();
 const http = require('http');
 const { Server } = require('socket.io');
-const colors = ['#FF5733', '#33FF57', '#3357FF', '#FF33A1', '#33FFF6'];
 
 const server = http.createServer(app);
 const io = new Server(server, { pingInterval: 2000, pingTimeout: 5000 });
@@ -13,6 +12,15 @@ app.use(express.static('public'));
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
+
+
+
+let obstaculos = []
+
+obstaculos.push({x:1024*.22, y:200, width:10, length:200, lives:3})
+obstaculos.push({x:1024*.77, y:200, width:10, length:200, lives:3})
+
+console.log(obstaculos)
 
 const backEndPlayers = {};
 const backEndProjectiles = {};
@@ -52,15 +60,14 @@ io.on('connection', (socket) => {
       x: Math.cos(angle) * 5,
       y: Math.sin(angle) * 5,
     };
-    const randomIndex = Math.floor(Math.random() * colors.length);
-    const projectileColor = colors[randomIndex];
+    const playerColor = backEndPlayers[socket.id]?.color || '#FFFFFF'; // Usa blanco si el color no se encuentra
 
     backEndProjectiles[projectileId] = {
       x,
       y,
       velocity,
       playerId: socket.id,
-      color: projectileColor,
+      color: playerColor, // Asigna el color directamente
     };
 
     // Emitir los proyectiles actualizados a todos los jugadores
@@ -108,7 +115,28 @@ setInterval(() => {
       delete backEndProjectiles[id];
       continue;
     }
+    continuar = true
+    for (o of obstaculos){
+      if (!backEndProjectiles[id]) continue
+      if(
+        (backEndProjectiles[id].x > o.x && backEndProjectiles[id].x < o.x + o.width) &&
+        (backEndProjectiles[id].y > o.y && backEndProjectiles[id].y < o.y + o.length)
+      ){
+        delete backEndProjectiles[id]
+        o.lives --;
 
+        if(o.lives <=0){
+          // lo elimina de la lista
+          obstaculos = obstaculos.filter((a)=>{
+            return a != o
+          })
+        }
+        continuar = false
+        continue
+      }
+    }
+    if (!continuar) continue
+    
     for (const playerId in backEndPlayers) {
       const backEndPlayer = backEndPlayers[playerId];
       if (!backEndPlayer) {
@@ -126,7 +154,7 @@ setInterval(() => {
         backEndProjectiles[id].playerId !== playerId
       ) {
         console.log(`Impacto: ${playerId} ha sido golpeado por un proyectil`);
-        backEndPlayers[playerId].lives -= 2;
+        backEndPlayers[playerId].lives -= 1 ;
         io.to(playerId).emit('updateLives', backEndPlayers[playerId].lives);
     
         if (backEndPlayers[playerId].lives <= 0) {
@@ -141,6 +169,7 @@ setInterval(() => {
     }
   }
 
+  io.emit('updateObstaculos', JSON.stringify(obstaculos));
   io.emit('updateProjectiles', backEndProjectiles);
   io.emit('updatePlayers', backEndPlayers);
 }, 15);

@@ -46,6 +46,8 @@ canvas.addEventListener('click', (event) => {
     return; // Salir si el jugador no está definido
   }
 
+  let shootMode = "burst"
+
   const { top, left } = canvas.getBoundingClientRect();
   const playerPosition = { x: player.x, y: player.y };
 
@@ -54,12 +56,52 @@ canvas.addEventListener('click', (event) => {
     event.clientX - left - playerPosition.x
   );
 
-  socket.emit('shoot', {
-    x: playerPosition.x,
-    y: playerPosition.y,
-    angle,
-  });
+  // switch (shootMode) {
+  //   case "burst":
+  //     console.log("Hola soy gay")
+  //     for (let i = 0; i < 4; i++){
+  //        setTimeout(()=>{
+  //          socket.emit('shoot', {
+  //            x: playerPosition.x,
+  //            y: playerPosition.y,
+  //            angle,
+  //          });
+  //       }, i*15)
+
+  //     }
+      
+  //     break;
+  
+  //   default:
+
+  //   socket.emit('shoot', {
+  //     x: playerPosition.x,
+  //      y: playerPosition.y,
+  //        angle,
+  //        color: player.color
+  //     });
+  //     break;
+  // }
+
 });
+
+let obstaculos = []
+const updateObstaculos = ()=>{
+  for ( o of obstaculos){
+    c.fillStyle = "white"  
+    c.fillRect(o.x, o.y, o.width, o.length)
+
+
+  }
+}
+
+socket.on("updateObstaculos", data =>{
+  data = JSON.parse(data)
+  obstaculos = data;
+
+  
+  
+})
 
 socket.on('updatePlayers', (backEndPlayers) => {
   for (const id in backEndPlayers) {
@@ -142,6 +184,8 @@ let animationId;
 function animate() {
   animationId = requestAnimationFrame(animate);
   c.clearRect(0, 0, canvas.width, canvas.height);
+
+  updateObstaculos()
 
   for (const id in frontEndPlayers) {
     const frontEndPlayer = frontEndPlayers[id];
