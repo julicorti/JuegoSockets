@@ -18,26 +18,34 @@ let obstaculos = []
 const preset = (number) => {
   if (number == 0) {
     obstaculos.push({
-      x: 1024 * 0.22,
+      x: 1024 * 0.22,  // Primera posición
       y: 200,
       width: 10,
       length: 200,
       lives: 3
-    })
-    obstaculos.push({
-      x: 1024 * 0.77,
+  });
+  obstaculos.push({
+      x: 1024 * 0.40,  // Segunda posición (espacio añadido)
       y: 200,
       width: 10,
       length: 200,
       lives: 3
-    })
-    obstaculos.push({
-      x: 1024 * 0.90,
+  });
+  obstaculos.push({
+      x: 1024 * 0.58,  // Tercera posición (más espacio)
       y: 200,
       width: 10,
       length: 200,
       lives: 3
-    })
+  });
+  obstaculos.push({
+      x: 1024 * 0.76,  // Cuarta posición (más espacio)
+      y: 200,
+      width: 10,
+      length: 200,
+      lives: 3
+  });
+
   } else if (number == 1) {
     obstaculos.push({
       x: 1024 * 0.33,
